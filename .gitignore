@@ -1,0 +1,27 @@
+# engine / game code build outputs
+engine/*
+!engine/README.md
+game/dlls/
+game/cl_dlls/
+tools/sdhlt/
+tools/src/
+# files written by the engine at runtime
+game/config.cfg
+game/video.cfg
+game/opengl.cfg
+game/userconfig.cfg
+game/save/
+game/logs/
+*.log
+# compiler intermediates
+*.prt
+*.lin
+*.pts
+*.wa_
+*.ext
+*.p0
+*.p1
+*.p2
+*.p3
+*.bsp.bak
+__pycache__/

@@ -1,0 +1,6 @@
+// Before the Thaw - startup script, executed once by the engine
+// (Xash3D looks for <gamefolder>.rc; our game folder is "game").
+exec default.cfg
+exec config.cfg
+exec userconfig.cfg
+stuffcmds

@@ -1,0 +1,4 @@
+// Before the Thaw - texture material types for footsteps (pm_shared).
+// Format: <type letter> <texture name prefix>. Default type is C, which plays
+// player/pl_step1-4.wav - in this game those are wooden floor boards.
+// Outdoor snow (type N) will be added together with the village location.

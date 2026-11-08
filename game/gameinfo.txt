@@ -1,0 +1,25 @@
+// Before the Thaw - game description for Xash3D FWGS
+// This is a standalone game: it does not use or require Half-Life (valve/).
+
+game            "Before the Thaw"
+title           "Before the Thaw"
+version         "0.1"
+date            "2026"
+type            "singleplayer_only"
+basedir         "game"
+startmap        "btt_house"
+trainmap        "btt_house"
+
+// game code (HLSDK-portable build, see tools/build_game.*)
+// the engine adds the platform suffix itself (hl_amd64.so, hl_arm64.so, ...)
+gamedll         "dlls/hl.dll"
+gamedll_linux   "dlls/hl.so"
+gamedll_osx     "dlls/hl.dylib"
+
+nomodels        "1"
+noskills        "1"
+secure          "0"
+max_edicts      "900"
+max_tempents    "500"
+max_beams       "64"
+max_particles   "4096"
