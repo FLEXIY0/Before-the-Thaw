@@ -4,6 +4,7 @@ rem code (HLSDK-portable) into game\dlls + game\cl_dlls.
 rem Needs: Git, Python 3, CMake, Visual Studio 2019/2022 and the SDL2 development
 rem package for Visual Studio (https://libsdl.org). Set SDL2_DIR to it, e.g.
 rem   set SDL2_DIR=C:\libs\SDL2-2.30.0
+rem Run it from "x86 Native Tools Command Prompt for VS" so waf finds the compiler.
 setlocal
 call "%~dp0_common.bat" || exit /b 1
 if "%SDL2_DIR%"=="" (echo Set SDL2_DIR to the SDL2 VC development package & exit /b 1)

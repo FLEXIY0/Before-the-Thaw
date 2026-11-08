@@ -90,6 +90,29 @@ cd development/web_preview && python3 -m http.server 8000   # открыть htt
 
 ## Сборка и запуск
 
+### Быстрый путь для Windows (готовые сборки, без компиляции C++)
+
+1. **Компилятор карт.** Скачайте последний релиз SDHLT:
+   <https://github.com/seedee/SDHLT/releases>. Из архива положите в
+   `tools\sdhlt\` файлы `sdHLCSG*.exe`, `sdHLBSP*.exe`, `sdHLVIS*.exe`,
+   `sdHLRAD*.exe` и `sdhlt.wad`. Подходят обе версии, с суффиксом `_x64` и без.
+2. **Карта.** Запустите `tools\compile.bat`. Должен появиться файл
+   `game\maps\btt_house.bsp`.
+3. **Движок.** На странице <https://github.com/FWGS/xash3d-fwgs/releases/tag/continuous>
+   скачайте архив для Windows **i386 (32-bit)**. Все файлы движка (`xash3d.exe`,
+   `*.dll`, `extras.pk3`, если он есть) положите в `engine\`. Папка `valve`
+   из архива не нужна.
+4. **Игровой код.** На странице <https://github.com/FWGS/hlsdk-portable/releases/tag/continuous>
+   скачайте архив ветки `master` для Windows **i386**. Из его папки
+   `valve` скопируйте `dlls\hl.dll` в `game\dlls\`, а `cl_dlls\client.dll` —
+   в `game\cl_dlls\`. Разрядность игрового кода и движка должна совпадать.
+5. Запустите `tools\run.bat`.
+
+Если что-то не запускается, в консоли движка (`~`) и в `engine\` или
+`game\` будет лог. Лог компиляции карты лежит в `development\build\btt_house.log`.
+
+Ниже описана полная сборка из исходников (её же делают скрипты).
+
 ### 1. Компилятор карт (один раз)
 
 Используется **SDHLT** (продолжение VHLT/ZHLT, совместим с GoldSrc и Xash3D,
@@ -127,8 +150,10 @@ HLSDK-portable в `game/dlls` и `game/cl_dlls`. На Windows по умолча�
 
 ### 3. Компиляция карты
 
+Без параметров — полная компиляция, с `fast` — быстрая черновая.
+
 ```bat
-tools\compile.bat            rem полная компиляция
+tools\compile.bat
 tools\compile.bat btt_house fast
 ```
 
