@@ -1,0 +1,467 @@
+<title>Before the Thaw — изба</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Serif:ital,wght@0,700;1,400&display=swap">
+<style>
+/* Layout: one full-bleed game viewport; a start card and a thin HUD float above it. Single dark look (it's a game screen). */
+:root {
+  --ink: #0d0f12;          /* night window */
+  --panel: rgba(16, 18, 22, 0.86);
+  --frost: #d8e0e8;        /* frosted glass */
+  --muted: #8f9aa6;
+  --ember: #e08a3c;        /* stove glow accent */
+  --line: rgba(216, 224, 232, 0.16);
+  --display: "PT Serif", Georgia, "Times New Roman", serif;
+  --mono: "PT Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--ink); color: var(--frost); font-family: var(--mono); overflow: hidden; }
+#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; touch-action: none; }
+#start {
+  position: fixed; inset: 0; display: grid; place-items: center;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px; background: rgba(8, 10, 12, 0.55);
+}
+.card { max-width: 34rem; width: 100%; background: var(--panel); border: 1px solid var(--line); padding: 22px 24px; display: grid; gap: 14px; }
+.card h1 { font-family: var(--display); font-weight: 700; font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0; letter-spacing: 0.01em; text-wrap: balance; }
+.card h1 em { font-weight: 400; color: var(--muted); font-size: 0.6em; display: block; letter-spacing: 0.04em; }
+.card p { margin: 0; line-height: 1.55; color: var(--muted); font-size: 0.86rem; }
+.keys { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 0.84rem; }
+.keys b { color: var(--frost); font-weight: 400; border: 1px solid var(--line); padding: 0 6px; }
+.keys span { color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button {
+  font: inherit; color: var(--ink); background: var(--frost); border: 0; padding: 10px 18px; cursor: pointer;
+}
+button.ghost { background: transparent; color: var(--frost); border: 1px solid var(--line); }
+button:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+#status { color: var(--ember); font-size: 0.82rem; }
+#hud { position: fixed; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); text-align: center; pointer-events: none; font-size: 0.9rem; text-shadow: 0 1px 0 #000; }
+#cross { position: fixed; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1px 0 0 -1px; background: var(--frost); opacity: 0.7; pointer-events: none; }
+#corner { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); font-size: 0.72rem; color: var(--muted); pointer-events: none; text-align: right; }
+.note { border-top: 1px solid var(--line); padding-top: 10px; font-size: 0.76rem !important; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<canvas id="view"></canvas>
+<div id="cross" hidden></div>
+<div id="hud"></div>
+<div id="corner">Before the Thaw · btt_house · предпросмотр</div>
+<div id="start">
+  <div class="card">
+    <h1>Before the Thaw<em>изба · январь 2000</em></h1>
+    <p>Проходка по стартовой локации прямо в браузере: та же геометрия, текстуры и звуки, что в исходнике карты <code>btt_house.map</code>. Свет запечён упрощённо, движок Xash3D здесь не используется.</p>
+    <div class="keys">
+      <b>WASD</b><span>ходить, мышь — смотреть</span>
+      <b>E</b><span>использовать: выключатель, радио, телефон; держать — тянуть мебель</span>
+      <b>в стол / стул</b><span>толкать</span>
+      <b>Пробел · Ctrl</b><span>прыжок · присесть</span>
+      <b>Shift</b><span>тихий шаг</span>
+      <b>R</b><span>разрешение: 320 / 640 / полное</span>
+    </div>
+    <div class="row">
+      <button id="go" disabled>Загрузка…</button>
+      <span id="status"></span>
+    </div>
+    <p class="note">На телефоне: левая половина экрана — идти, правая — смотреть, касание — использовать.</p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+"use strict";
+const $ = (id) => document.getElementById(id);
+const canvas = $("view"), hud = $("hud"), statusEl = $("status"), goBtn = $("go");
+
+// ---------------------------------------------------------------- renderer
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+renderer.setPixelRatio(1);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(74, 1, 1, 6000);   // ~90° horizontal on 16:10
+camera.rotation.order = "YXZ";
+const RES = [320, 640, 0];
+let resIdx = 1;
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  const target = RES[resIdx];
+  const scale = target ? Math.min(1, target / w) : 1;
+  renderer.setSize(Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale)), false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", resize);
+resize();
+
+// map (x, y, z) z-up  ->  three (x, z, -y)
+const T = (x, y, z) => new THREE.Vector3(x, z, -y);
+
+// ---------------------------------------------------------------- loading
+const texLoader = new THREE.TextureLoader();
+const texCache = {};
+function tex(name) {
+  if (!texCache[name]) {
+    const t = texLoader.load("tex/" + name + ".png");
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.magFilter = THREE.NearestFilter;
+    t.minFilter = THREE.NearestMipmapLinearFilter;
+    texCache[name] = t;
+  }
+  return texCache[name];
+}
+
+let S = null;                  // scene.json
+const entObj = {};             // entity index -> THREE.Group
+const groupsBySwitch = [];     // meshes whose colours depend on switches
+const switches = {};           // light name -> on
+const usables = [];            // meshes that can be targeted with E
+
+function rebuildColors(g) {
+  const col = g.geometry.attributes.color.array, base = g.userData.base, sw = g.userData.sw;
+  col.set(base);
+  for (const k in sw) {
+    if (!switches[k]) continue;
+    const a = sw[k];
+    for (let i = 0; i < a.length; i++) col[i] += a[i];
+  }
+  g.geometry.attributes.color.needsUpdate = true;
+}
+
+function buildScene() {
+  for (const g of S.groups) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(g.pos, 3));
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(g.uv, 2));
+    geo.setAttribute("color", new THREE.Float32BufferAttribute(g.col.slice(), 3));
+    const e = S.entities[g.ent] || {};
+    const glass = e.cls === "func_wall";
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex(g.tex), vertexColors: true, side: THREE.FrontSide,
+      transparent: glass, opacity: glass ? Number(e.renderamt || 150) / 255 : 1, depthWrite: !glass,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData = { base: Float32Array.from(g.col), sw: g.sw || {}, ent: g.ent };
+    if (Object.keys(mesh.userData.sw).length) groupsBySwitch.push(mesh);
+    if (!entObj[g.ent]) { entObj[g.ent] = new THREE.Group(); scene.add(entObj[g.ent]); }
+    entObj[g.ent].add(mesh);
+    if (["func_button", "func_pushable", "func_door_rotating"].includes(e.cls)) usables.push(mesh);
+  }
+  Object.assign(switches, S.switches);
+  groupsBySwitch.forEach(rebuildColors);
+  // pendulum pivot: move the group so it rotates around its ORIGIN brush
+  for (const [i, e] of Object.entries(S.entities)) {
+    if (e.cls === "func_pendulum" && e.origin && entObj[i]) {
+      const o = T(...e.origin), grp = entObj[i];
+      const pivot = new THREE.Group(); pivot.position.copy(o); scene.add(pivot);
+      grp.position.sub(o); pivot.add(grp); grp.userData.pivot = pivot;
+      pendulums.push({ pivot, amp: Math.abs(parseFloat((e.angles || "0 0 -10").split(" ")[2])) || 10, period: 1.0 });
+    }
+  }
+  // sky
+  const sky = new THREE.CubeTextureLoader().setPath("sky/").load(["rt.png", "bk.png", "up.png", "dn.png", "ft.png", "lf.png"]);
+  sky.magFilter = THREE.NearestFilter;
+  scene.background = sky;
+}
+const pendulums = [];
+
+// ---------------------------------------------------------------- collision (map coordinates)
+let solids = [];   // {ent, lo:[x,y,z], hi:[x,y,z], off:[dx,dy,dz]}
+const HULL = 16, STAND = 72, DUCK = 36, STEP = 18;
+const player = { x: 0, y: 0, z: 0, vz: 0, yaw: 0, pitch: 0, h: STAND, onGround: false };
+
+function boxHits(lo, hi, skipEnt) {
+  const out = [];
+  for (const s of solids) {
+    if (s.ent === skipEnt) continue;
+    const o = s.off;
+    if (lo[0] < s.hi[0] + o[0] && hi[0] > s.lo[0] + o[0] &&
+        lo[1] < s.hi[1] + o[1] && hi[1] > s.lo[1] + o[1] &&
+        lo[2] < s.hi[2] + o[2] && hi[2] > s.lo[2] + o[2]) out.push(s);
+  }
+  return out;
+}
+const pbox = (x, y, z, h) => [[x - HULL, y - HULL, z], [x + HULL, y + HULL, z + h]];
+
+// pushables: entity index -> {off} shared by all its solids
+const pushOff = {};
+function entBoxes(ent) { return solids.filter((s) => s.ent === ent); }
+function tryMoveEnt(ent, dx, dy) {
+  const off = pushOff[ent];
+  for (const s of entBoxes(ent)) {
+    const lo = [s.lo[0] + off[0] + dx, s.lo[1] + off[1] + dy, s.lo[2] + off[2] + 0.5];
+    const hi = [s.hi[0] + off[0] + dx, s.hi[1] + off[1] + dy, s.hi[2] + off[2]];
+    if (boxHits(lo, hi, ent).length) return false;
+    const [plo, phi] = pbox(player.x, player.y, player.z, player.h);
+    if (lo[0] < phi[0] && hi[0] > plo[0] && lo[1] < phi[1] && hi[1] > plo[1] && lo[2] < phi[2] && hi[2] > plo[2]) return false;
+  }
+  off[0] += dx; off[1] += dy;
+  const g = entObj[ent]; if (g) g.position.set(off[0], 0, -off[1]);
+  return true;
+}
+
+let lastPushSnd = 0, lastLockSnd = 0;
+function moveAxis(axis, d) {
+  if (!d) return true;
+  const nx = player.x + (axis === 0 ? d : 0), ny = player.y + (axis === 1 ? d : 0);
+  let [lo, hi] = pbox(nx, ny, player.z, player.h);
+  let hits = boxHits(lo, hi);
+  if (!hits.length) { player.x = nx; player.y = ny; return true; }
+  // push furniture
+  const push = hits.find((s) => S.entities[s.ent] && S.entities[s.ent].cls === "func_pushable");
+  if (push && hits.every((s) => s.ent === push.ent)) {
+    const k = 0.6;   // furniture is heavy
+    if (tryMoveEnt(push.ent, axis === 0 ? d * k : 0, axis === 1 ? d * k : 0)) {
+      if (performance.now() - lastPushSnd > 500) { play("debris_pushbox1.wav", 0.5, push); lastPushSnd = performance.now(); }
+    }
+    return false;
+  }
+  const door = hits.find((s) => S.entities[s.ent] && S.entities[s.ent].cls === "func_door_rotating");
+  if (door && performance.now() - lastLockSnd > 1200) { play("buttons_latchlocked1.wav", 0.8); lastLockSnd = performance.now(); hint("Заперто снаружи", 1500); }
+  // step up
+  if (player.onGround) {
+    [lo, hi] = pbox(nx, ny, player.z + STEP, player.h);
+    if (!boxHits(lo, hi).length) {
+      player.x = nx; player.y = ny; player.z += STEP;
+      settle();
+      return true;
+    }
+  }
+  return false;
+}
+function settle() {   // drop back down after a step
+  for (let i = 0; i < STEP; i++) {
+    const [lo, hi] = pbox(player.x, player.y, player.z - 1, player.h);
+    if (boxHits(lo, hi).length) break;
+    player.z -= 1;
+  }
+}
+
+// ---------------------------------------------------------------- audio
+let actx = null;
+const buffers = {};
+const loops = {};
+async function loadSound(name) {
+  if (buffers[name]) return buffers[name];
+  const r = await fetch("snd/" + name);
+  buffers[name] = await actx.decodeAudioData(await r.arrayBuffer());
+  return buffers[name];
+}
+function panner(pos, radius) {
+  const p = actx.createPanner();
+  p.panningModel = "equalpower"; p.distanceModel = "inverse";
+  p.refDistance = radius; p.maxDistance = 2000; p.rolloffFactor = 1.4;
+  p.positionX.value = pos.x; p.positionY.value = pos.y; p.positionZ.value = pos.z;
+  return p;
+}
+function play(name, vol = 1, at = null) {
+  if (!actx || !buffers[name]) return;
+  const src = actx.createBufferSource(); src.buffer = buffers[name];
+  const g = actx.createGain(); g.gain.value = vol;
+  src.connect(g);
+  if (at && at.lo) {
+    const off = pushOff[at.ent] || [0, 0, 0];
+    g.connect(panner(T((at.lo[0] + at.hi[0]) / 2 + off[0], (at.lo[1] + at.hi[1]) / 2 + off[1], at.lo[2]), 80)).connect(actx.destination);
+  } else g.connect(actx.destination);
+  src.start();
+}
+function startAmbient(kv) {
+  const name = kv.message.replace("/", "_");
+  const flags = parseInt(kv.spawnflags || "0", 10);
+  const vol = (parseFloat(kv.health || "10") / 10) * 0.9;
+  const o = kv.origin.split(" ").map(Number);
+  const looped = !(flags & 32);
+  const state = { name, vol, pos: T(o[0], o[1], o[2]), flags, src: null, gain: null };
+  state.play = () => {
+    const src = actx.createBufferSource(); src.buffer = buffers[name]; src.loop = looped;
+    const g = actx.createGain(); g.gain.value = vol;
+    src.connect(g);
+    if (flags & 1) g.connect(actx.destination);
+    else g.connect(panner(state.pos, (flags & 2) ? 48 : 96)).connect(actx.destination);
+    src.start(); state.src = src;
+    if (!looped) src.onended = () => { state.src = null; };
+  };
+  state.stop = () => { if (state.src) { state.src.stop(); state.src = null; } };
+  if (!(flags & 16)) state.play();
+  if (kv.targetname) loops[kv.targetname] = state;
+}
+
+// ---------------------------------------------------------------- interaction
+let hintTimer = 0;
+function hint(text, ms = 0) { hud.textContent = text; hintTimer = ms ? performance.now() + ms : 0; }
+const ray = new THREE.Raycaster(); ray.far = 72;
+function lookTarget() {
+  ray.setFromCamera({ x: 0, y: 0 }, camera);
+  const hit = ray.intersectObjects(scene.children, true)[0];
+  if (!hit) return null;
+  const ent = hit.object.userData.ent;
+  const e = S.entities[ent];
+  if (!e || !["func_button", "func_pushable", "func_door_rotating"].includes(e.cls)) return null;
+  return { ent, e };
+}
+function labelFor(t) {
+  if (!t) return "";
+  if (t.e.cls === "func_pushable") return "Толкнуть · E — тянуть";
+  if (t.e.cls === "func_door_rotating") return "Дверь на улицу";
+  if (t.e.target === "radio_snd") return "E — радио";
+  if (t.e.target === "phone_snd") return "E — снять трубку";
+  if (t.e.target && t.e.target.startsWith("light")) return "E — свет";
+  return "E";
+}
+let grabbed = null;
+function use() {
+  const t = lookTarget();
+  if (!t) return;
+  if (t.e.cls === "func_pushable") { grabbed = t.ent; return; }
+  if (t.e.cls === "func_door_rotating") { play("buttons_latchlocked1.wav", 0.8); hint("Заперто снаружи", 1500); return; }
+  const tgt = t.e.target;
+  if (tgt in switches) {
+    switches[tgt] = !switches[tgt];
+    groupsBySwitch.forEach(rebuildColors);
+    play("buttons_lightswitch2.wav", 0.7);
+  } else if (loops[tgt]) {
+    play("buttons_lightswitch2.wav", 0.5);
+    const l = loops[tgt];
+    if (l.src) l.stop(); else l.play();
+  }
+}
+
+// ---------------------------------------------------------------- input
+const keys = {};
+let locked = false;
+document.addEventListener("keydown", (e) => {
+  keys[e.code] = true;
+  if (e.code === "KeyE" && !e.repeat && running) use();
+  if (e.code === "KeyR" && running) { resIdx = (resIdx + 1) % RES.length; resize(); hint(["320 × …", "640 × …", "полное разрешение"][resIdx], 1200); }
+  if (["Space", "ArrowUp", "ArrowDown"].includes(e.code)) e.preventDefault();
+});
+document.addEventListener("keyup", (e) => { keys[e.code] = false; if (e.code === "KeyE") grabbed = null; });
+document.addEventListener("mousemove", (e) => {
+  if (!locked) return;
+  // browsers sometimes report one huge jump right after pointer lock
+  if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
+  player.yaw -= e.movementX * 0.0025;
+  player.pitch = Math.max(-1.5, Math.min(1.5, player.pitch - e.movementY * 0.0025));
+});
+document.addEventListener("pointerlockchange", () => {
+  locked = document.pointerLockElement === canvas;
+  if (!locked && running && !touchMode) { $("start").hidden = false; goBtn.textContent = "Продолжить"; }
+});
+canvas.addEventListener("click", () => { if (running && !locked && !touchMode) canvas.requestPointerLock?.(); });
+
+// touch: left half = move stick, right half = look, tap = use
+let touchMode = false;
+const touches = {};
+canvas.addEventListener("touchstart", (e) => {
+  touchMode = true;
+  for (const t of e.changedTouches) touches[t.identifier] = { x0: t.clientX, y0: t.clientY, x: t.clientX, y: t.clientY, left: t.clientX < window.innerWidth / 2, t0: performance.now() };
+  e.preventDefault();
+}, { passive: false });
+canvas.addEventListener("touchmove", (e) => {
+  for (const t of e.changedTouches) {
+    const s = touches[t.identifier]; if (!s) continue;
+    if (!s.left) { player.yaw -= (t.clientX - s.x) * 0.006; player.pitch = Math.max(-1.5, Math.min(1.5, player.pitch - (t.clientY - s.y) * 0.006)); }
+    s.x = t.clientX; s.y = t.clientY;
+  }
+  e.preventDefault();
+}, { passive: false });
+canvas.addEventListener("touchend", (e) => {
+  for (const t of e.changedTouches) {
+    const s = touches[t.identifier];
+    if (s && !s.left && performance.now() - s.t0 < 250 && Math.hypot(s.x - s.x0, s.y - s.y0) < 10) use();
+    delete touches[t.identifier];
+  }
+});
+
+// ---------------------------------------------------------------- loop
+let running = false, last = 0, stepAcc = 0, stepN = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now;
+  if (!S) return;
+  if (running) simulate(dt);
+  for (const p of pendulums) p.pivot.rotation.x = THREE.MathUtils.degToRad(p.amp) * Math.sin(now / 1000 * Math.PI * 2 / p.period);
+  camera.position.copy(T(player.x, player.y, player.z + (player.h === STAND ? 64 : 28)));
+  camera.rotation.set(player.pitch, player.yaw - Math.PI / 2, 0);
+  if (actx) {
+    const L = actx.listener, f = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    if (L.positionX) { L.positionX.value = camera.position.x; L.positionY.value = camera.position.y; L.positionZ.value = camera.position.z;
+      L.forwardX.value = f.x; L.forwardY.value = f.y; L.forwardZ.value = f.z; L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0; }
+  }
+  if (running && (!hintTimer || now > hintTimer)) { hintTimer = 0; hud.textContent = labelFor(lookTarget()); }
+  renderer.render(scene, camera);
+}
+function simulate(dt) {
+  let fx = 0, fy = 0;
+  if (keys.KeyW || keys.ArrowUp) fy += 1;
+  if (keys.KeyS || keys.ArrowDown) fy -= 1;
+  if (keys.KeyD) fx += 1;
+  if (keys.KeyA) fx -= 1;
+  for (const s of Object.values(touches)) if (s.left) { fx += (s.x - s.x0) / 60; fy -= (s.y - s.y0) / 60; }
+  const len = Math.hypot(fx, fy); if (len > 1) { fx /= len; fy /= len; }
+  const duck = keys.ControlLeft || keys.ControlRight || keys.KeyC;
+  if (duck && player.h === STAND) player.h = DUCK;
+  if (!duck && player.h === DUCK) {
+    const [lo, hi] = pbox(player.x, player.y, player.z, STAND);
+    if (!boxHits(lo, hi).length) player.h = STAND;
+  }
+  const speed = (duck ? 0.333 : (keys.ShiftLeft || keys.ShiftRight) ? 0.45 : 1) * 190;
+  const c = Math.cos(player.yaw), s = Math.sin(player.yaw);
+  const dx = (c * fy + s * fx) * speed * dt, dy = (s * fy - c * fx) * speed * dt;
+  const ox = player.x, oy = player.y;
+  // pulling: drag the grabbed furniture along
+  if (grabbed !== null && (dx || dy)) {
+    const away = dx * c + dy * s < 0;   // moving backwards
+    if (away && tryMoveEnt(grabbed, dx, dy) && performance.now() - lastPushSnd > 500) { play("debris_pushbox1.wav", 0.5); lastPushSnd = performance.now(); }
+  }
+  moveAxis(0, dx); moveAxis(1, dy);
+  // gravity
+  if ((keys.Space) && player.onGround) { player.vz = 268; player.onGround = false; }
+  player.vz -= 800 * dt;
+  const dz = player.vz * dt;
+  const [lo, hi] = pbox(player.x, player.y, player.z + dz, player.h);
+  if (boxHits(lo, hi).length) { if (player.vz < 0) player.onGround = true; player.vz = 0; }
+  else { player.z += dz; player.onGround = false; }
+  // footsteps on the boards
+  const moved = Math.hypot(player.x - ox, player.y - oy);
+  if (player.onGround && !(keys.ShiftLeft || keys.ShiftRight) && !duck) {
+    stepAcc += moved;
+    if (stepAcc > 72) { stepAcc = 0; stepN = (stepN + 1 + Math.floor(Math.random() * 2)) % 4; play("player_pl_step" + (stepN + 1) + ".wav", 0.35); }
+  }
+}
+
+// ---------------------------------------------------------------- boot
+async function boot() {
+  try {
+    statusEl.textContent = "сцена…";
+    S = await (await fetch("scene.json")).json();
+    solids = S.solids.map(([ent, cls, lo, hi]) => ({ ent, cls, lo, hi, off: null }));
+    for (const s of solids) { if (!pushOff[s.ent]) pushOff[s.ent] = [0, 0, 0]; s.off = pushOff[s.ent]; }
+    buildScene();
+    const start = S.points.find((p) => p.classname === "info_player_start");
+    const o = start.origin.split(" ").map(Number);
+    player.x = o[0]; player.y = o[1]; player.z = o[2] - 36;
+    player.yaw = THREE.MathUtils.degToRad(Number((start.angles || "0 0 0").split(" ")[1]));
+    statusEl.textContent = "";
+    goBtn.disabled = false; goBtn.textContent = "Войти в дом";
+  } catch (err) {
+    statusEl.textContent = "Не удалось загрузить сцену: " + err.message;
+  }
+}
+goBtn.addEventListener("click", async () => {
+  $("start").hidden = true; $("cross").hidden = false;
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    const names = new Set(S.points.filter((p) => p.classname === "ambient_generic").map((p) => p.message.replace("/", "_")));
+    ["buttons_lightswitch2.wav", "buttons_latchlocked1.wav", "debris_pushbox1.wav", "player_pl_step1.wav", "player_pl_step2.wav", "player_pl_step3.wav", "player_pl_step4.wav"].forEach((n) => names.add(n));
+    await Promise.all([...names].map((n) => loadSound(n).catch(() => null)));
+    S.points.filter((p) => p.classname === "ambient_generic").forEach(startAmbient);
+  }
+  running = true;
+  if (!("ontouchstart" in window) || matchMedia("(pointer: fine)").matches) canvas.requestPointerLock?.();
+});
+requestAnimationFrame(frame);
+boot();
+})();
+</script>
