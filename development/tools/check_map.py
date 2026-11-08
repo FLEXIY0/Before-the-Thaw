@@ -20,7 +20,7 @@ import sys
 import numpy as np
 
 TOOL_TEX = {"null", "origin", "clip", "skip", "hint", "aaatrigger", "sky", "bevel"}
-SOLID_CLASSES = {"worldspawn", "func_detail"}
+SOLID_CLASSES = {"worldspawn", "func_detail", "func_group"}  # func_group = TrenchBroom layers, compiled as world
 EPS = 0.01
 
 

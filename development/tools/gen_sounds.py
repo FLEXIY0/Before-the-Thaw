@@ -204,6 +204,18 @@ def latch_locked():
     return x
 
 
+def furniture_scrape(k):
+    # func_pushable: a wooden leg dragged over floor boards (debris/pushbox*.wav)
+    rr = np.random.default_rng(300 + k)
+    d = 0.6 + 0.2 * k
+    n = int(d * SR)
+    rate = 25 + 20 * k + lp_fast(rr.standard_normal(n), 4) * 200
+    phase = np.cumsum(np.abs(rate) / SR)
+    pulses = (np.diff(np.floor(phase), prepend=0) > 0).astype(float)
+    x = bp_fast(pulses, 180, 900) + bp_fast(rr.standard_normal(n), 300, 2500) * 0.15
+    return x * np.sin(np.linspace(0, np.pi, n)) ** 0.4
+
+
 def step(k):
     # footstep on old floor boards: soft thump + sometimes a board squeak
     rr = np.random.default_rng(100 + k)
@@ -232,6 +244,8 @@ def main():
     made.append(write("buttons/latchlocked1.wav", latch_locked(), peak=0.7))
     for k in range(1, 5):
         made.append(write("player/pl_step%d.wav" % k, step(k), peak=0.5))
+    for k in range(1, 4):
+        made.append(write("debris/pushbox%d.wav" % k, furniture_scrape(k), peak=0.5))
     made.append(write("common/null.wav", np.zeros(64)))
     print("sounds: %d -> %s" % (len(made), OUT))
 

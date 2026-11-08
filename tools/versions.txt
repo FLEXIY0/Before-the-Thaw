@@ -1,0 +1,7 @@
+# Pinned third-party sources (fetched by the build_* scripts, never committed)
+SDHLT_URL=https://github.com/seedee/SDHLT
+SDHLT_REF=v1.3.1
+XASH_URL=https://github.com/FWGS/xash3d-fwgs
+XASH_REF=e9b94dc1a89bcd8867e2d16b37cd6f1cbd4dbd1c
+HLSDK_URL=https://github.com/FWGS/hlsdk-portable
+HLSDK_REF=89e83b92d561f5ceb11594c2f15e2e1519bc6c36

@@ -1,0 +1,9 @@
+*.bat text eol=crlf
+*.sh text eol=lf
+*.map text eol=lf
+*.wad binary
+*.bsp binary
+*.spr binary
+*.wav binary
+*.tga binary
+*.png binary
